@@ -1,0 +1,21 @@
+[package]
+name = "tattler-rs"
+version = "0.1.0"
+authors = ["Mats Kindahl <mats.kindahl@gmail.com>"]
+edition = "2018"
+
+[lib]
+name = "tattler"
+path = "src/lib.rs"
+
+[dependencies]
+tokio-codec = { version = "0.1.0", optional = true }
+env_logger = { version = "0.5", default-features = false }
+tokio-io = "0.1.12"
+bytes = "0.4.7"
+tokio = "0.1"
+futures = "0.1.20"
+serde = "1.0.43"
+serde_cbor = "0.8.2"
+serde_derive = "1.0.43"
+uuid = { version = "0.6.3", features = ["v4","serde"] }
