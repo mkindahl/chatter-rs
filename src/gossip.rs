@@ -1,25 +1,31 @@
+use crate::devices::DeviceUpdate;
+use crate::view::ViewUpdate;
 use bytes::BytesMut;
 use serde_cbor::{from_slice, to_vec};
-use tokio_io::_tokio_codec::{Decoder, Encoder};
+use tokio::codec::{Decoder, Encoder};
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Gossip {
-    // Debug message
-    Debug { text: String },
-
-    // Status information for a device on a machine
-    Status {},
+    DebugMessage { text: String },
+    DeviceGossip(DeviceUpdate),
+    ViewGossip(ViewUpdate),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Message {
-    pub server: Uuid,
-    pub timestamp: u128,
+    pub sender: Uuid,
+    pub timestamp_millis: i64,
     pub payload: Option<Gossip>,
 }
 
 pub struct GossipCodec;
+
+impl GossipCodec {
+    pub fn new() -> GossipCodec {
+        GossipCodec {}
+    }
+}
 
 impl Encoder for GossipCodec {
     type Item = Message;
