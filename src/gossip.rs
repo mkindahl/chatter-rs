@@ -5,17 +5,18 @@ use serde_cbor::{from_slice, to_vec};
 use tokio::codec::{Decoder, Encoder};
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Gossip {
     DebugMessage { text: String },
     DeviceGossip(DeviceUpdate),
     ViewGossip(ViewUpdate),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message {
     pub sender: Uuid,
     pub timestamp_millis: i64,
+    pub hops: u32,
     pub payload: Option<Gossip>,
 }
 

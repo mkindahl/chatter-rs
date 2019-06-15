@@ -35,13 +35,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Shared device information.
     let shared_devices = Arc::new(Mutex::new(Devices::new()));
 
+    let (mut writer, reader) = UdpFramed::new(socket, GossipCodec::new()).split();
+
     // Future for updating state based on received gossip.
     let update_future = {
         let devices = shared_devices.clone();
         let view = shared_view.clone();
         move |(msg, addr): (Message, SocketAddr)| {
-            debug!("Received gossip message from address {}: {:?}", addr, msg);
-            if let Some(gossip) = msg.payload {
+            if let Some(ref gossip) = msg.payload {
                 match gossip {
                     Gossip::DebugMessage { text } => info!("From {}  {}", addr, text),
 
@@ -56,13 +57,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .process(msg.sender, msg.timestamp_millis, view_gossip),
                 }
             }
-            Ok(())
+            Ok((msg, addr))
+        }
+    };
+
+    // Future for forwarding gossip to other servers in the
+    // view. Right now, it forwards the message to all servers in the
+    // cluster, not just a subset.
+    let gossip_future = {
+        let view = shared_view.clone();
+        move |(mut msg, addr): (Message, SocketAddr)| {
+            if msg.hops > 0 {
+                msg.hops -= 1;
+                let locked_view = view.lock().expect("unable to lock view for forwarding");
+                for (_uuid, info) in &locked_view.servers {
+                    writer.start_send((msg.clone(), info.address.clone()))?;
+                }
+                writer.poll_complete()?;
+            }
+            Ok((msg, addr))
         }
     };
 
     tokio::run({
-        UdpFramed::new(socket, GossipCodec::new())
-            .for_each(update_future)
+        reader
+            .and_then(move |(msg, addr): (Message, SocketAddr)| {
+                debug!("Received gossip message from address {}: {:?}", addr, msg);
+                Ok((msg, addr))
+            })
+            .and_then(update_future)
+            .and_then(gossip_future)
+            .for_each(|(_msg, addr): (Message, SocketAddr)| {
+                debug!("Finished processing gossip message from {}", addr);
+                Ok(())
+            })
             .map(|_| ())
             .map_err(|e| error!("error: {:?}", e))
     });

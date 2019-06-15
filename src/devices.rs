@@ -24,7 +24,7 @@ impl DeviceInfo {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum DeviceUpdate {
     DeviceAdded {
         key: String,
@@ -53,19 +53,20 @@ impl Devices {
         }
     }
 
-    pub fn process(&mut self, _sender: Uuid, _timestamp_millis: i64, gossip: DeviceUpdate) {
+    pub fn process(&mut self, _sender: Uuid, _timestamp_millis: i64, gossip: &DeviceUpdate) {
         match gossip {
             DeviceUpdate::DeviceAdded { key, description } => {
-                self.devices.insert(key, DeviceInfo::new(&description));
+                self.devices
+                    .insert(key.to_string(), DeviceInfo::new(&description));
             }
 
             DeviceUpdate::DeviceRemoved { key } => {
-                self.devices.remove(&key);
+                self.devices.remove(key);
             }
 
             DeviceUpdate::DeviceStatus { key, metrics } => {
-                if let Some(info) = self.devices.get_mut(&key) {
-                    info.metrics = metrics;
+                if let Some(info) = self.devices.get_mut(key) {
+                    info.metrics = metrics.clone();
                 }
             }
         }

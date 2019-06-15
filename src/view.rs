@@ -25,7 +25,7 @@ impl fmt::Display for ServerInfo {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ViewUpdate {
     ServerAdded { uuid: Uuid, addr: SocketAddr },
 
@@ -33,7 +33,7 @@ pub enum ViewUpdate {
 }
 
 pub struct ServerView {
-    servers: HashMap<Uuid, ServerInfo>,
+    pub servers: HashMap<Uuid, ServerInfo>,
 }
 
 impl ServerView {
@@ -43,7 +43,7 @@ impl ServerView {
         }
     }
 
-    pub fn process(&mut self, _sender: Uuid, timestamp_millis: i64, gossip: ViewUpdate) {
+    pub fn process(&mut self, _sender: Uuid, timestamp_millis: i64, gossip: &ViewUpdate) {
         match gossip {
             ViewUpdate::ServerAdded { uuid, addr } => {
                 let ts = NaiveDateTime::from_timestamp(
@@ -51,7 +51,8 @@ impl ServerView {
                     (1_000_000 * timestamp_millis % 1000) as u32,
                 );
                 info!("Adding server {} with address {} to view", uuid, addr);
-                self.servers.insert(uuid, ServerInfo::new(addr, ts));
+                self.servers
+                    .insert(uuid.clone(), ServerInfo::new(addr.clone(), ts));
             }
 
             ViewUpdate::ServerRemoved { uuid } => {

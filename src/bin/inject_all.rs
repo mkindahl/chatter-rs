@@ -36,6 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Message {
                     timestamp_millis: Utc::now().timestamp_millis(),
                     sender: uuid,
+                    hops: 5,
                     payload: Some(Gossip::DebugMessage {
                         text: "hello world".to_string(),
                     }),
@@ -48,6 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Message {
                     timestamp_millis: Utc::now().timestamp_millis(),
                     sender: uuid,
+                    hops: 5,
                     payload: Some(Gossip::ViewGossip(ViewUpdate::ServerAdded {
                         uuid: server_uuid,
                         addr: local_addr,
@@ -61,6 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Message {
                     timestamp_millis: Utc::now().timestamp_millis(),
                     sender: uuid,
+                    hops: 5,
                     payload: Some(Gossip::ViewGossip(ViewUpdate::ServerRemoved {
                         uuid: server_uuid,
                     })),
