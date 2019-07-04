@@ -23,4 +23,5 @@ extern crate log;
 pub mod devices;
 pub mod error;
 pub mod gossip;
+pub mod state;
 pub mod view;

@@ -57,7 +57,7 @@ impl ServerView {
         }
     }
 
-    pub fn process(&mut self, _sender: Uuid, timestamp_millis: i64, gossip: &ViewUpdate) {
+    pub fn update(&mut self, gossip: &ViewUpdate, _sender: &Uuid, timestamp_millis: i64) {
         match gossip {
             ViewUpdate::ServerAdded { uuid, addr } => {
                 let ts = NaiveDateTime::from_timestamp(

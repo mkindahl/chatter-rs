@@ -13,9 +13,11 @@
 // permissions and limitations under the License.
 
 use crate::devices::DeviceUpdate;
+use crate::state::State;
 use crate::view::ViewUpdate;
 use bytes::BytesMut;
 use serde_cbor::{from_slice, to_vec};
+use std::net::SocketAddr;
 use tokio::codec::{Decoder, Encoder};
 use uuid::Uuid;
 
@@ -26,12 +28,42 @@ pub enum Gossip {
     ViewGossip(ViewUpdate),
 }
 
+impl Gossip {
+    pub fn update_state(
+        &self,
+        state: &mut State,
+        sender: &Uuid,
+        timestamp_millis: i64,
+        peer: &SocketAddr,
+    ) {
+        match self {
+            Gossip::DebugMessage { text } => info!("From {}  {}", peer, text),
+
+            Gossip::DeviceGossip(device_gossip) => {
+                state.update_devices(device_gossip, sender, timestamp_millis)
+            }
+
+            Gossip::ViewGossip(view_gossip) => {
+                state.update_view(view_gossip, sender, timestamp_millis)
+            }
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message {
     pub sender: Uuid,
     pub timestamp_millis: i64,
     pub hops: u32,
     pub payload: Option<Gossip>,
+}
+
+impl Message {
+    pub fn update_state(&self, state: &mut State, peer: &SocketAddr) {
+        if let Some(ref gossip) = self.payload {
+            gossip.update_state(state, &self.sender, self.timestamp_millis, peer)
+        }
+    }
 }
 
 pub struct GossipCodec;
