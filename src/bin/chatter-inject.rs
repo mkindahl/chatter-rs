@@ -24,22 +24,27 @@ extern crate chatter;
 extern crate log;
 extern crate env_logger;
 extern crate futures;
+extern crate serde_json;
 
-use chatter::gossip::{Gossip, GossipCodec, Message};
+use chatter::gossip::{Gossip, Message};
 use chrono::Utc;
 use std::env;
-use std::net::SocketAddr;
-use tokio::net::{UdpFramed, UdpSocket};
-use tokio::prelude::*;
+use std::io;
+use std::io::{stdin, Read};
+use std::net::{SocketAddr, UdpSocket};
 use uuid::Uuid;
+
+fn read_from_stdin() -> Result<String, io::Error> {
+    let mut input = String::new();
+    stdin().read_to_string(&mut input)?;
+    Ok(input)
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
-    let remote_addr: SocketAddr = env::args()
-        .nth(1)
-        .unwrap_or("127.0.0.1:8080".into())
-        .parse()?;
+    let remote_addr: SocketAddr = env::args().nth(1).expect("missing address").parse()?;
+    let input = env::args().nth(2).unwrap_or(read_from_stdin()?);
     let socket = {
         let local_addr: SocketAddr = if remote_addr.is_ipv4() {
             "0.0.0.0:0"
@@ -50,21 +55,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         UdpSocket::bind(&local_addr)?
     };
 
-    tokio::run(
-        UdpFramed::new(socket, GossipCodec::new())
-            .send((
-                Message {
-                    timestamp_millis: Utc::now().timestamp_millis(),
-                    sender: Uuid::new_v4(),
-                    hops: 5,
-                    payload: Some(Gossip::DebugMessage {
-                        text: "hello world".to_string(),
-                    }),
-                },
-                remote_addr,
-            ))
-            .map(|_| ())
-            .map_err(|e| error!("error: {:?}", e)),
-    );
+    let json: Gossip = serde_json::from_str(&input)?;
+    debug!("Saw JSON:\n{:#?}", json);
+    let message = Message {
+        timestamp_millis: Utc::now().timestamp_millis(),
+        sender: Uuid::new_v4(),
+        hops: 5,
+        payload: Some(json),
+    };
+    debug!("Sending message:\n{:#?}", &message);
+    let bytes = serde_cbor::to_vec(&message)?;
+    socket.send_to(&bytes, &remote_addr)?;
     Ok(())
 }
