@@ -30,13 +30,29 @@ use std::sync::{Arc, Mutex};
 use tokio::net::{UdpFramed, UdpSocket};
 use tokio::prelude::*;
 
+use clap::{App, Arg};
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
+    let options = App::new("Chatter Agent")
+        .version("0.1")
+        .author("Mats Kindahl <mats.kindahl@gmail.com>")
+        .about("Monitoring agent for distributed systems.")
+        .arg(
+            Arg::with_name("listen")
+                .short("l")
+                .long("listen")
+                .value_name("ADDRESS")
+                .help("Address to listen for gossip on")
+                .takes_value(true),
+        )
+        .get_matches();
+
     let socket = {
-        let sockaddr = args()
-            .nth(1)
-            .unwrap_or("127.0.0.1:8080".to_string())
+        let sockaddr = options
+            .value_of("listen")
+            .unwrap_or("0.0.0.0:2428")
             .parse::<SocketAddr>()?;
         UdpSocket::bind(&sockaddr)?
     };
