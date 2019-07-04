@@ -12,6 +12,16 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
+//! Chatter is a simple to use distributed monitoring system.
+//!
+//! Chatter is a distributed monitoring system that is deployed as a
+//! set of collaborating Chatter agents. Each agent will run on a
+//! machine and monitor the devices on that machine. The status of the
+//! devices on each machine is then disseminated to the other chatter
+//! agents using a gossipping protocol.
+//!
+//! Chatter is implemented using Tokio.
+
 extern crate chrono;
 extern crate serde_cbor;
 extern crate uuid;
