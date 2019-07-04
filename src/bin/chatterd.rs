@@ -20,10 +20,13 @@ extern crate bytes;
 extern crate chatter;
 extern crate futures;
 
-use chatter::gossip::{GossipCodec, Message};
-use chatter::state::State;
+use chatter::devices::Devices;
+use chatter::gossip::{Gossip, GossipCodec, Message};
+use chatter::view::ServerView;
+use std::env::args;
 use std::net::SocketAddr;
 use std::result::Result;
+use std::sync::{Arc, Mutex};
 use tokio::net::{UdpFramed, UdpSocket};
 use tokio::prelude::*;
 
@@ -56,15 +59,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Listening on {}", socket.local_addr()?);
 
-    let shared_state = State::new();
+    // Shared view of all existing agents in the cluster.
+    let shared_view = Arc::new(Mutex::new(ServerView::new()));
+
+    // Shared device information.
+    let shared_devices = Arc::new(Mutex::new(Devices::new()));
 
     let (mut writer, reader) = UdpFramed::new(socket, GossipCodec::new()).split();
 
     // Future for updating state based on received gossip.
     let update_future = {
-        let mut state = shared_state.clone();
+        let devices = shared_devices.clone();
+        let view = shared_view.clone();
         move |(msg, addr): (Message, SocketAddr)| {
-            msg.update_state(&mut state, &addr);
+            if let Some(ref gossip) = msg.payload {
+                match gossip {
+                    Gossip::DebugMessage { text } => info!("From {}  {}", addr, text),
+
+                    Gossip::DeviceGossip(device_gossip) => devices
+                        .lock()
+                        .expect("unable to lock devices database for update")
+                        .process(msg.sender, msg.timestamp_millis, device_gossip),
+
+                    Gossip::ViewGossip(view_gossip) => view
+                        .lock()
+                        .expect("unable to lock view for update")
+                        .process(msg.sender, msg.timestamp_millis, view_gossip),
+                }
+            }
             Ok((msg, addr))
         }
     };
@@ -73,14 +95,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // view. Right now, it forwards the message to all servers in the
     // cluster, not just a subset.
     let gossip_future = {
-        let state = shared_state.clone();
+        let view = shared_view.clone();
         move |(mut msg, addr): (Message, SocketAddr)| {
             if msg.hops > 0 {
                 msg.hops -= 1;
-                let locked_view = state
-                    .view
-                    .lock()
-                    .expect("unable to lock view for forwarding");
+                let locked_view = view.lock().expect("unable to lock view for forwarding");
                 for (_uuid, info) in &locked_view.servers {
                     writer.start_send((msg.clone(), info.address.clone()))?;
                 }
