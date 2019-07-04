@@ -12,15 +12,32 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
+//! Module for managing the device collection.
+
 use std::collections::HashMap;
 use std::fmt;
 use std::string::String;
 use uuid::Uuid;
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum Metric {
+    Text(String),
+}
+
 #[derive(Debug)]
 pub struct DeviceInfo {
+    /// The UUID of the agent that is responsible for the device.
+    pub owner: Uuid,
+
+    /// Name of the device.
+    pub name: String,
+
+    /// Description of the device.
     pub description: String,
-    pub metrics: HashMap<String, String>,
+
+    /// Collection of metrics containing the current status of the
+    /// device.
+    pub metrics: HashMap<String, Metric>,
 }
 
 impl fmt::Display for DeviceInfo {
@@ -30,8 +47,27 @@ impl fmt::Display for DeviceInfo {
 }
 
 impl DeviceInfo {
-    pub fn new(descr: &str) -> DeviceInfo {
+    /// Construct device information
+    ///
+    /// Each chatter agent owns a set of named devices, where each
+    /// name is unique for a device. The combination of agent UUID and
+    /// device name uniquely identify the device in the entire
+    /// deployment. Any changes to the device status or generation of
+    /// metrics is goverened completely by the owner, which guarantee
+    /// the order of changes to the device status.
+    ///
+    /// # Parameters
+    ///
+    /// * `uuid` - The UUID of the agent that owns the device.
+    ///
+    /// * `name` - The name of the device, unique for each agent.
+    ///
+    /// * `descr` - Device description. Intended for humans.
+    ///
+    pub fn new(uuid: &Uuid, name: &str, descr: &str) -> DeviceInfo {
         DeviceInfo {
+            owner: uuid.clone(),
+            name: String::from(name),
             description: String::from(descr),
             metrics: HashMap::new(),
         }
@@ -41,46 +77,79 @@ impl DeviceInfo {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum DeviceUpdate {
     DeviceAdded {
-        key: String,
+        origin: Uuid,
+        name: String,
         description: String,
     },
 
     DeviceRemoved {
-        key: String,
+        origin: Uuid,
+        name: String,
     },
 
     DeviceStatus {
-        key: String,
-        metrics: HashMap<String, String>,
+        origin: Uuid,
+        name: String,
+        metrics: HashMap<String, Metric>,
     },
 }
 
 #[derive(Debug)]
-pub struct Devices {
-    devices: HashMap<String, DeviceInfo>,
+pub struct DeviceCollection {
+    devices: HashMap<Uuid, HashMap<String, DeviceInfo>>,
 }
 
-impl Devices {
-    pub fn new() -> Devices {
-        Devices {
+impl DeviceCollection {
+    pub fn new() -> DeviceCollection {
+        DeviceCollection {
             devices: HashMap::new(),
         }
     }
 
-    pub fn process(&mut self, _sender: Uuid, _timestamp_millis: i64, gossip: &DeviceUpdate) {
+    pub fn update(&mut self, gossip: &DeviceUpdate, _origin: &Uuid, _timestamp_millis: i64) {
         match gossip {
-            DeviceUpdate::DeviceAdded { key, description } => {
+            DeviceUpdate::DeviceAdded {
+                origin,
+                name,
+                description,
+            } => {
                 self.devices
-                    .insert(key.to_string(), DeviceInfo::new(&description));
+                    .entry(origin.clone())
+                    .or_insert(HashMap::new())
+                    .insert(
+                        name.to_string(),
+                        DeviceInfo::new(origin, &name, &description),
+                    );
+                debug!("Added device {} to {}", name, origin);
             }
 
-            DeviceUpdate::DeviceRemoved { key } => {
-                self.devices.remove(key);
+            DeviceUpdate::DeviceRemoved { origin, name } => {
+                if let Some(entry) = self.devices.get_mut(origin) {
+                    entry.remove(name);
+                    debug!("Removed device {} from {}", name, origin);
+                }
             }
 
-            DeviceUpdate::DeviceStatus { key, metrics } => {
-                if let Some(info) = self.devices.get_mut(key) {
-                    info.metrics = metrics.clone();
+            DeviceUpdate::DeviceStatus {
+                origin,
+                name,
+                metrics,
+            } => {
+                if let Some(agent) = self.devices.get_mut(origin) {
+                    if let Some(info) = agent.get_mut(name) {
+                        for (metric, value) in metrics {
+                            *info
+                                .metrics
+                                .entry(metric.to_string())
+                                .or_insert(value.clone()) = value.clone();
+                        }
+                    }
+                    debug!("Updated device {} on {}: {:?}", name, origin, metrics);
+                } else {
+                    warn!(
+                        "Update of device {} on agent {} failed - agent not added",
+                        name, origin
+                    );
                 }
             }
         }
@@ -88,10 +157,12 @@ impl Devices {
     }
 }
 
-impl fmt::Display for Devices {
+impl fmt::Display for DeviceCollection {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        for (k, v) in self.devices.iter() {
-            writeln!(f, "{}: {}", k, v.description)?
+        for (origin, map) in self.devices.iter() {
+            for (name, info) in map {
+                writeln!(f, "{} {}: {}", origin, name, info.description)?
+            }
         }
         Ok(())
     }
